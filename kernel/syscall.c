@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "x86.h"
 #include "syscall.h"
+#include "syscallsCount.h"
 
 // User code makes a system call with INT T_SYSCALL.
 // System call number in %eax.
@@ -122,6 +123,7 @@ argstr(int n, char **pp)
   return fetchstr(addr, pp);
 }
 
+//pointers σε συναρτήσεις που βρίσκονται σε εξωτερικά αρχεία
 extern int sys_chdir(void);
 extern int sys_close(void);
 extern int sys_dup(void);
@@ -144,8 +146,13 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_getpinfo(void);
-extern int sys_settickets(void);
+extern int sys_getfavnum(void);
+extern void sys_shutdown(void);
+extern int sys_getcount(void);
+extern int sys_killrandom(void);
+extern void sys_settickets(void);
 
+//Πίνακας που αντιστοιχεί το κάθε syscall number στον pointer της αντίστοιχης συνάρτησης
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,
@@ -169,8 +176,15 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_getpinfo]    sys_getpinfo,
-[SYS_settickets]    sys_settickets
+[SYS_getfavnum] sys_getfavnum,
+[SYS_shutdown] sys_shutdown,
+[SYS_getcount] sys_getcount,
+[SYS_killrandom] sys_killrandom,
+[SYS_settickets] sys_settickets
 };
+
+//Πίνακας που μετράει πόσες φορές εκτελέστηκε το κάθε syscall
+int syscallsCount[SYSCALLCROWD] = {0};
 
 void
 syscall(void)
@@ -180,13 +194,10 @@ syscall(void)
   num = proc->tf->eax;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     proc->tf->eax = syscalls[num]();
+    syscallsCount[num-1] += 1;
   } else {
     cprintf("%d %s: unknown sys call %d\n",
             proc->pid, proc->name, num);
     proc->tf->eax = -1;
   }
-}
-
-int sys_settickets(void) {
-    return -1;
 }

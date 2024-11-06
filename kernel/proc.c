@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "random.h"
 
 struct ptable ptable;
 
@@ -45,6 +46,9 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->ticks = 0;
+
+  p->tickets = INITTICKETS;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -98,6 +102,8 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
+
+  p->tickets = INITTICKETS*NPROCTICKETS;
 
   p->state = RUNNABLE;
 }
@@ -153,7 +159,9 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
- 
+
+  np->tickets = proc->tickets + INITTICKETS;
+
   pid = np->pid;
   np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));
@@ -232,6 +240,7 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        p->tickets = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -259,11 +268,22 @@ wait(void)
 void
 scheduler(void)
 {
+  LCG lcg;
+
+  lcg.m = NPROC*NPROCTICKETS;
+  lcg.a = sys_uptime();
+  lcg.c = sys_getfavnum();
+  lcg.state = 0;
+  lcg_init(&lcg, sys_uptime());
+
   struct proc *p = 0;
+  int ticket;
 
   for(;;){
     // Enable interrupts on this processor.
     sti();
+
+    lcg.a = sys_uptime();
 
     // no runnable processes? (did we hit the end of the table last time?)
     // if so, wait for irq before trying again.
@@ -272,13 +292,21 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    lcg.m = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
+      if(p->state == RUNNABLE) lcg.m += p->tickets;
+    }
+    (lcg.m)++;
+    ticket = lcg_random(&lcg);
+    //cprintf("Selecting ticket %d\t", ticket);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE) continue;
+      ticket -= p->tickets;
+      if (ticket > 0) continue;
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      //cprintf("PID: %d\n", p->pid);
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -290,6 +318,7 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
+      break;
     }
     release(&ptable.lock);
 

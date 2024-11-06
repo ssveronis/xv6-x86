@@ -10,3 +10,5 @@
 #define MAXARG       32  // max exec arguments
 #define LOGSIZE      10  // max data sectors in on-disk log
 
+#define NPROCTICKETS 5000 //maximum number of lottery tickets per process
+#define INITTICKETS  1   //Initial number of tickets

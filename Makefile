@@ -46,6 +46,8 @@ OBJS := \
 	kobj/uart.o\
 	kobj/vectors.o\
 	kobj/vm.o\
+	kobj/set.o\
+	kobj/random.o\
 	$(XOBJS)
 
 ifneq ("$(MEMFS)","")
@@ -86,6 +88,14 @@ kobj/%.o: kernel/%.c
 	@mkdir -p kobj
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+kobj/%.o: set/%.c
+	@mkdir -p kobj
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+kobj/%.o: random/%.c
+	@mkdir -p kobj
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 kobj/%.o: kernel/%.S
 	@mkdir -p kobj
 	$(CC) $(ASFLAGS) -c -o $@ $<
@@ -96,6 +106,10 @@ uobj/%.o: user/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 uobj/%.o: ulib/%.c
+	@mkdir -p uobj
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+uobj/%.o: set/%.c
 	@mkdir -p uobj
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -138,7 +152,7 @@ MKVECTORS = tools/vectors$(BITS).pl
 kernel/vectors.S: $(MKVECTORS)
 	perl $(MKVECTORS) > kernel/vectors.S
 
-ULIB = uobj/ulib.o uobj/usys.o uobj/printf.o uobj/umalloc.o
+ULIB = uobj/ulib.o uobj/usys.o uobj/printf.o uobj/umalloc.o uobj/set.o
 
 fs/%: uobj/%.o $(ULIB)
 	@mkdir -p fs out
@@ -179,6 +193,11 @@ USER_PROGS=\
 	usertests\
 	wc\
 	zombie\
+	touch\
+	getfavnum\
+	shutdown\
+	getsyscallcount\
+	killrandom\
 	lotteryschedtest\
 
 UPROGS := $(addprefix fs/,$(USER_PROGS))

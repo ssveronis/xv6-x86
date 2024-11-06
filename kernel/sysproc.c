@@ -5,6 +5,9 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "syscallsCount.h"
+#include "random.h"
+#include "set.h"
 
 extern struct ptable ptable;
 
@@ -120,4 +123,58 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int sys_getfavnum(void){
+  return 7;
+}
+
+void sys_shutdown(void){
+  outw(0x604, 0x2000); //Γράφουμε στην διεύθυνση θύρας I/O 0x604 την τιμή 0x2000
+  return;
+}
+
+int sys_getcount(void){
+  int syscall;
+  if(argint(0, &syscall) < 0) return -1; //Αν δεν υπάρχει όρισμα για το syscall επιστρέφουμε -1. Διαφορετικά το βάζουμε στην syscall
+  cprintf("%d\n", syscall);
+  cprintf("%d\n", syscallsCount[syscall-1]);
+  return syscallsCount[syscall-1];
+}
+
+int sys_killrandom(void){
+  LCG lcg;
+  Set *set = createRoot();
+
+  // Από sys_getpinfo
+  acquire(&ptable.lock);
+  struct proc *p;
+  for (p = ptable.proc; p != &(ptable.proc[NPROC]); p++) { //Για κάθε διεργασία
+      createNode(p->pid, set);
+  }
+  release(&ptable.lock);
+
+  //Γεννήτρια ψευδοτυχαίων αριθμών
+  lcg.m = set->size;
+  lcg.a = sys_uptime()/(MAX(sys_getfavnum(), set->size));
+  lcg.c = sys_getfavnum();
+  lcg.state = 0;
+
+  lcg_init(&lcg, sys_uptime());
+  lcg_random(&lcg);
+  
+  cprintf("Killing PID: %d\n", getNodeAtPosition(set,lcg.state)->i);
+  kill(getNodeAtPosition(set,lcg.state)->i);
+  
+  return 1;
+}
+
+void sys_settickets(void){
+  int n;
+  if (argint(0, &n) < 0) return;
+  if (n < 1 || n > NPROCTICKETS) return;
+  acquire(&ptable.lock);
+  proc->tickets = n;
+  release(&ptable.lock);
+  return;
 }
